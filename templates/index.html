@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV 文件合并工具</title>
+    <!-- 引入 Bootstrap 美化表格 -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            padding: 2rem;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h2 class="mb-4">📤 上传多个 CSV 文件并合并</h2>
+
+    <form method="post" enctype="multipart/form-data" class="mb-4">
+        <input type="file" name="files" multiple class="form-control mb-2">
+        <button type="submit" class="btn btn-primary">上传并预览</button>
+    </form>
+
+    {% if filenames %}
+        <h5>📁 上传文件列表：</h5>
+        <ul>
+        {% for name in filenames %}
+            <li>{{ name }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if preview_html %}
+        <h5 class="mt-4">🔍 合并预览（前 10 行）：</h5>
+        <div class="table-container mt-2">
+            {{ preview_html | safe }}
+        </div>
+    {% endif %}
+
+    {% if downloadable %}
+        <a href="/download" class="btn btn-success mt-3">⬇️ 下载合并后的 CSV</a>
+        <p class="text-muted mt-2">💡 文件将自动保存至浏览器默认下载文件夹。</p>
+    {% endif %}
+</body>
+</html>
