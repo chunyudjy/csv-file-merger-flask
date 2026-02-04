@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV 月报合并工具 (纯本地版)</title>
+    <style>
+        /* 简单的 CSS 让界面看起来像个现代 App */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f4f9;
+            padding: 40px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 { margin-top: 0; color: #2c3e50; font-size: 24px; }
+        .control-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        select, input[type="file"] {
+            margin-bottom: 15px;
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        #downloadBtn { background-color: #28a745; display: none; margin-top: 10px; }
+        #downloadBtn:hover { background-color: #218838; }
+
+        /* 表格样式 */
+        .table-responsive {
+            margin-top: 20px;
+            overflow-x: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th { background-color: #f8f9fa; font-weight: 600; }
+        .status { margin-top: 10px; font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📄 CSV 月报合并工具</h1>
+    <p style="color: #666; font-size: 14px;">无需联网，完全在本地运行。支持多文件合并。</p>
+
+    <div class="control-panel">
+        <label for="encodingSelect">1. 选择文件编码 (如果有中文乱码，请切换此选项)</label>
+        <select id="encodingSelect">
+            <option value="UTF-8">UTF-8 (标准格式)</option>
+            <option value="GBK">GBK / GB18030 (Excel导出/中文系统常见)</option>
+        </select>
+
+        <label for="fileInput">2. 选择 CSV 文件 (按住 Ctrl 或 Shift 多选)</label>
+        <input type="file" id="fileInput" multiple accept=".csv">
+
+        <div class="status" id="statusMsg">等待选择文件...</div>
+        
+        <div style="margin-top: 15px;">
+            <button id="processBtn" onclick="processFiles()">合并文件</button>
+            <button id="downloadBtn" onclick="downloadCSV()">⬇️ 下载合并后的 CSV</button>
+        </div>
+    </div>
+
+    <div id="previewArea" style="display:none;">
+        <h3>数据预览 (前 10 行)</h3>
+        <div class="table-responsive">
+            <table id="previewTable">
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    let mergedData = []; // 存储合并后的所有行
+    let finalHeader = ""; // 存储表头
+
+    async function processFiles() {
+        const fileInput = document.getElementById('fileInput');
+        const encoding = document.getElementById('encodingSelect').value;
+        const statusMsg = document.getElementById('statusMsg');
+        const files = Array.from(fileInput.files);
+
+        if (files.length === 0) {
+            alert("请先选择文件！");
+            return;
+        }
+
+        statusMsg.innerText = `正在处理 ${files.length} 个文件...`;
+        mergedData = [];
+        finalHeader = "";
+        
+        try {
+            // 使用 Promise.all 并发读取所有文件
+            const filePromises = files.map((file, index) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve({ 
+                        name: file.name, 
+                        content: e.target.result, 
+                        index: index 
+                    });
+                    reader.onerror = (e) => reject(e);
+                    // 关键：根据用户选择的编码读取
+                    reader.readAsText(file, encoding);
+                });
+            });
+
+            const results = await Promise.all(filePromises);
+
+            // 按照文件选择顺序排序（虽然通常是乱序的，这里简单处理）
+            // 如果需要严格顺序，可以依据文件名排序 results.sort(...)
+
+            results.forEach((res, i) => {
+                // 简单的 CSV 解析：按换行符分割
+                // 注意：这里假设 CSV 没有跨行的单元格（简单的月报数据通常没有）
+                let lines = res.content.split(/\r\n|\n/).filter(line => line.trim() !== "");
+
+                if (lines.length === 0) return;
+
+                if (finalHeader === "") {
+                    // 如果是第一个处理的文件，取第一行作为表头
+                    finalHeader = lines[0];
+                    mergedData.push(...lines.slice(1)); // 加入数据行
+                } else {
+                    // 后续文件，检查表头是否一致（可选），然后只取数据行
+                    // 这里直接去掉第一行表头，将剩余数据追加
+                    mergedData.push(...lines.slice(1));
+                }
+            });
+
+            renderPreview();
+            document.getElementById('downloadBtn').style.display = 'inline-block';
+            statusMsg.innerText = `✅ 合并完成！共 ${mergedData.length} 条数据。`;
+
+        } catch (error) {
+            console.error(error);
+            statusMsg.innerText = "❌ 处理出错，请检查文件格式或编码。";
+        }
+    }
+
+    function renderPreview() {
+        const previewArea = document.getElementById('previewArea');
+        const thead = document.getElementById('tableHead');
+        const tbody = document.getElementById('tableBody');
+        
+        previewArea.style.display = 'block';
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        // 渲染表头
+        const headerCols = finalHeader.split(',');
+        let headerHtml = '<tr>';
+        headerCols.forEach(col => headerHtml += `<th>${col}</th>`);
+        headerHtml += '</tr>';
+        thead.innerHTML = headerHtml;
+
+        // 渲染前 10 行数据
+        const previewRows = mergedData.slice(0, 10);
+        previewRows.forEach(row => {
+            const cols = row.split(','); // 简单分割，未处理逗号在引号内的情况
+            let rowHtml = '<tr>';
+            cols.forEach(col => rowHtml += `<td>${col}</td>`);
+            rowHtml += '</tr>';
+            tbody.innerHTML += rowHtml;
+        });
+    }
+
+    function downloadCSV() {
+        // 组装最终的 CSV 内容
+        // 添加 BOM (\uFEFF) 让 Excel 打开时能自动识别 UTF-8 中文
+        const csvContent = "\uFEFF" + finalHeader + "\n" + mergedData.join("\n");
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `合并结果_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+</body>
+</html>
